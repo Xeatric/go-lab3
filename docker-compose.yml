@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paving_tiles_postgres
+    environment:
+      POSTGRES_USER: student
+      POSTGRES_PASSWORD: student_secure_password
+      POSTGRES_DB: paving_tiles_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - paving_network
+
+  app:
+    build: .
+    container_name: paving_tiles_app
+    ports:
+      - "4200:4200"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: student
+      DB_PASSWORD: student_secure_password
+      DB_NAME: paving_tiles_db  # ← ЭТА СТРОКА ОБЯЗАТЕЛЬНА!
+      PORT: 4200
+    depends_on:
+      - postgres
+    networks:
+      - paving_network
+    command: sh -c "sleep 5 && ./main"  # Даем время PostgreSQL запуститься
+
+volumes:
+  postgres_data:
+
+networks:
+  paving_network:
+    driver: bridge
