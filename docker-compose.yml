@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: paving_tiles_postgres
+    container_name: paving_tiles_postgres_lab3
+    restart: unless-stopped
     environment:
       POSTGRES_USER: student
       POSTGRES_PASSWORD: student_secure_password
@@ -11,31 +10,43 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_lab3:/var/lib/postgresql/data
     networks:
-      - paving_network
+      - paving_network_lab3
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U student -d paving_tiles_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   app:
     build: .
-    container_name: paving_tiles_app
-    ports:
-      - "4200:4200"
+    container_name: paving_tiles_app_lab3
+    restart: unless-stopped
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: student
       DB_PASSWORD: student_secure_password
-      DB_NAME: paving_tiles_db  # ← ЭТА СТРОКА ОБЯЗАТЕЛЬНА!
+      DB_NAME: paving_tiles_db
       PORT: 4200
+      # JWT настройки
+      JWT_ACCESS_SECRET: test_access_secret_32_chars_long!!!
+      JWT_REFRESH_SECRET: test_refresh_secret_32_chars_long!!
+      JWT_ACCESS_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 168h
+    ports:
+      - "4200:4200"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
-      - paving_network
-    command: sh -c "sleep 5 && ./main"  # Даем время PostgreSQL запуститься
+      - paving_network_lab3
 
 volumes:
-  postgres_data:
+  postgres_data_lab3:
 
 networks:
-  paving_network:
+  paving_network_lab3:
     driver: bridge

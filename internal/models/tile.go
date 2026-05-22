@@ -9,6 +9,7 @@ import (
 // Tile - модель тротуарной плитки
 type Tile struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
+	UserID      uint           `gorm:"not null;index" json:"user_id"`                   // владелец
 	Name        string         `gorm:"not null;size:200" json:"name"`                   // Название
 	Shape       string         `gorm:"not null;size:50" json:"shape"`                   // Форма (квадрат, прямоугольник, шестигранник)
 	Color       string         `gorm:"not null;size:50" json:"color"`                   // Цвет

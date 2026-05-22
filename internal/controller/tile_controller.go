@@ -1,11 +1,12 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
+	"strconv"
+
+	"paving-tiles-api/internal/auth/middleware"
 	"paving-tiles-api/internal/dto"
 	"paving-tiles-api/internal/service"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,129 +19,151 @@ func NewTileController(service service.TileService) *TileController {
 	return &TileController{service: service}
 }
 
-// GetTiles возвращает список плитки с пагинацией
-// @GET /api/v1/tiles?page=1&limit=10
+// GetTiles - получение списка (только своих плиток)
 func (c *TileController) GetTiles(ctx *gin.Context) {
-	var paginationReq dto.PaginationRequest
-	if err := ctx.ShouldBindQuery(&paginationReq); err != nil {
-		ctx.Error(err)
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	response, err := c.service.GetTiles(paginationReq.Page, paginationReq.Limit)
+	var paginationReq dto.PaginationRequest
+	if err := ctx.ShouldBindQuery(&paginationReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	response, err := c.service.GetTiles(userID, paginationReq.Page, paginationReq.Limit)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, response)
 }
 
-// GetTileByID возвращает плитку по ID
-// @GET /api/v1/tiles/:id
+// GetTileByID - получение по ID (только своей)
 func (c *TileController) GetTileByID(ctx *gin.Context) {
-	id, err := parseID(ctx.Param("id"))
-	if err != nil {
-		ctx.Error(err)
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	tile, err := c.service.GetTileByID(id)
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	tile, err := c.service.GetTileByID(userID, uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, tile)
 }
 
-// CreateTile создает новую плитку
-// @POST /api/v1/tiles
+// CreateTile - создание (привязывается к текущему пользователю)
 func (c *TileController) CreateTile(ctx *gin.Context) {
-	var req dto.CreateTileRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.Error(err)
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	tile, err := c.service.CreateTile(&req)
+	var req dto.CreateTileRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tile, err := c.service.CreateTile(userID, &req)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusCreated, tile)
 }
 
-// UpdateTile полностью обновляет плитку
-// @PUT /api/v1/tiles/:id
+// UpdateTile - полное обновление плитки
 func (c *TileController) UpdateTile(ctx *gin.Context) {
-	id, err := parseID(ctx.Param("id"))
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
 	var req dto.UpdateTileRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tile, err := c.service.UpdateTile(id, &req)
+	tile, err := c.service.UpdateTile(userID, uint(id), &req)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, tile)
 }
 
-// PatchTile частично обновляет плитку
-// @PATCH /api/v1/tiles/:id
+// PatchTile - частичное обновление плитки
 func (c *TileController) PatchTile(ctx *gin.Context) {
-	id, err := parseID(ctx.Param("id"))
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
 	var req dto.PatchTileRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tile, err := c.service.PatchTile(id, &req)
+	tile, err := c.service.PatchTile(userID, uint(id), &req)
 	if err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, tile)
 }
 
-// DeleteTile мягко удаляет плитку
-// @DELETE /api/v1/tiles/:id
+// DeleteTile - удаление (только своей)
 func (c *TileController) DeleteTile(ctx *gin.Context) {
-	id, err := parseID(ctx.Param("id"))
-	if err != nil {
-		ctx.Error(err)
+	userID := middleware.GetCurrentUserID(ctx)
+	if userID == 0 {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	if err := c.service.DeleteTile(id); err != nil {
-		ctx.Error(err)
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := c.service.DeleteTile(userID, uint(id)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.Status(http.StatusNoContent)
-}
-
-func parseID(idStr string) (uint, error) {
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		return 0, errors.New("invalid id format")
-	}
-	return uint(id), nil
 }

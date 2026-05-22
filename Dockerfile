@@ -3,8 +3,8 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
-# Устанавливаем необходимые утилиты
-RUN apk add --no-cache git
+# Установка необходимых утилит
+RUN apk add --no-cache git ca-certificates
 
 # Копируем go.mod и go.sum
 COPY go.mod go.sum ./
@@ -13,24 +13,28 @@ RUN go mod download
 # Копируем исходный код
 COPY . .
 
-# Собираем приложение
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main cmd/main.go
+# Сборка приложения
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main ./cmd/main.go
 
 # Финальный этап
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates postgresql-client
+RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+# Создание непривилегированного пользователя
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
+
+WORKDIR /app
 
 # Копируем бинарный файл
 COPY --from=builder /app/main .
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/migrations ./migrations
 
-# Делаем скрипт исполняемым
-RUN chmod +x ./scripts/wait-for-it.sh
+# Устанавливаем владельца
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 4200
 
-CMD ["./scripts/wait-for-it.sh", "postgres:5432", "--", "./main"]
+CMD ["./main"]

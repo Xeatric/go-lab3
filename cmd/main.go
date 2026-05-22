@@ -2,7 +2,11 @@ package main
 
 import (
 	"log"
-	"os"
+
+	authController "paving-tiles-api/internal/auth/controller"
+	authMiddleware "paving-tiles-api/internal/auth/middleware"
+	authRepo "paving-tiles-api/internal/auth/repository"
+	authService "paving-tiles-api/internal/auth/service"
 	"paving-tiles-api/internal/config"
 	"paving-tiles-api/internal/controller"
 	"paving-tiles-api/internal/database"
@@ -14,22 +18,11 @@ import (
 )
 
 func main() {
-	// Логируем все переменные окружения для отладки
-	log.Println("=== ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ===")
-	log.Printf("DB_HOST=%s", os.Getenv("DB_HOST"))
-	log.Printf("DB_PORT=%s", os.Getenv("DB_PORT"))
-	log.Printf("DB_USER=%s", os.Getenv("DB_USER"))
-	log.Printf("DB_PASSWORD=%s", os.Getenv("DB_PASSWORD"))
-	log.Printf("DB_NAME=%s", os.Getenv("DB_NAME"))
-	log.Println("============================")
-
 	// Загрузка конфигурации
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
 	}
-
-	log.Printf("Конфиг после загрузки: DBName=%s", cfg.DBName)
 
 	// Подключение к БД
 	db, err := database.Connect(cfg)
@@ -37,14 +30,20 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	log.Println("Database connected successfully")
-
 	// Миграции
 	if err := database.RunMigrations(db); err != nil {
 		log.Fatal("Failed to run migrations:", err)
 	}
 
-	// Инициализация слоев
+	// Auth слои
+	authRepoInstance := authRepo.NewAuthRepository(db)
+	authServiceInstance := authService.NewAuthService(authRepoInstance, cfg)
+	authControllerInstance := authController.NewAuthController(authServiceInstance, cfg)
+
+	// Auth middleware
+	authMiddlewareInstance := authMiddleware.NewAuthMiddleware(authServiceInstance)
+
+	// Business слои
 	tileRepo := repository.NewTileRepository(db)
 	tileService := service.NewTileService(tileRepo)
 	tileController := controller.NewTileController(tileService)
@@ -54,13 +53,36 @@ func main() {
 	router.Use(middleware.ErrorHandler())
 	router.Use(middleware.Logger())
 
+	// Публичные маршруты
 	router.GET("/", func(c *gin.Context) {
 		c.String(200, "Добро пожаловать в API каталога тротуарной плитки!")
 	})
 
-	api := router.Group("/api/v1")
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	// Auth маршруты (публичные)
+	auth := router.Group("/auth")
 	{
-		tiles := api.Group("/tiles")
+		auth.POST("/register", authControllerInstance.Register)
+		auth.POST("/login", authControllerInstance.Login)
+		auth.POST("/refresh", authControllerInstance.Refresh)
+		auth.GET("/oauth/:provider", authControllerInstance.OAuthLogin)
+		auth.GET("/oauth/:provider/callback", authControllerInstance.OAuthCallback)
+	}
+
+	// Защищенные маршруты (требуют аутентификации)
+	protected := router.Group("/api/v1")
+	protected.Use(authMiddlewareInstance.Authenticate())
+	{
+		// Auth эндпоинты (требуют аутентификации)
+		protected.GET("/auth/whoami", authControllerInstance.Whoami)
+		protected.POST("/auth/logout", authControllerInstance.Logout)
+		protected.POST("/auth/logout-all", authControllerInstance.LogoutAll)
+
+		// Business эндпоинты
+		tiles := protected.Group("/tiles")
 		{
 			tiles.GET("", tileController.GetTiles)
 			tiles.GET("/:id", tileController.GetTileByID)
@@ -69,17 +91,11 @@ func main() {
 			tiles.PATCH("/:id", tileController.PatchTile)
 			tiles.DELETE("/:id", tileController.DeleteTile)
 		}
-
-		api.GET("/info", func(c *gin.Context) {
-			c.JSON(200, gin.H{
-				"message": "API каталога тротуарной плитки",
-				"version": "2.0.0",
-			})
-		})
 	}
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
+
 }

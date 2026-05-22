@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+
 	"paving-tiles-api/internal/dto"
 	"paving-tiles-api/internal/models"
 	"paving-tiles-api/internal/repository"
@@ -10,12 +11,12 @@ import (
 )
 
 type TileService interface {
-	CreateTile(req *dto.CreateTileRequest) (*dto.TileResponse, error)
-	GetTileByID(id uint) (*dto.TileResponse, error)
-	GetTiles(page, limit int) (*dto.PaginationResponse, error)
-	UpdateTile(id uint, req *dto.UpdateTileRequest) (*dto.TileResponse, error)
-	PatchTile(id uint, req *dto.PatchTileRequest) (*dto.TileResponse, error)
-	DeleteTile(id uint) error
+	CreateTile(userID uint, req *dto.CreateTileRequest) (*dto.TileResponse, error)
+	GetTileByID(userID, id uint) (*dto.TileResponse, error)
+	GetTiles(userID uint, page, limit int) (*dto.PaginationResponse, error)
+	UpdateTile(userID, id uint, req *dto.UpdateTileRequest) (*dto.TileResponse, error)
+	PatchTile(userID, id uint, req *dto.PatchTileRequest) (*dto.TileResponse, error)
+	DeleteTile(userID, id uint) error
 }
 
 type tileService struct {
@@ -26,8 +27,9 @@ func NewTileService(repo repository.TileRepository) TileService {
 	return &tileService{repo: repo}
 }
 
-func (s *tileService) CreateTile(req *dto.CreateTileRequest) (*dto.TileResponse, error) {
+func (s *tileService) CreateTile(userID uint, req *dto.CreateTileRequest) (*dto.TileResponse, error) {
 	tile := &models.Tile{
+		UserID:      userID,
 		Name:        req.Name,
 		Shape:       req.Shape,
 		Color:       req.Color,
@@ -46,7 +48,7 @@ func (s *tileService) CreateTile(req *dto.CreateTileRequest) (*dto.TileResponse,
 	return s.toResponse(tile), nil
 }
 
-func (s *tileService) GetTileByID(id uint) (*dto.TileResponse, error) {
+func (s *tileService) GetTileByID(userID, id uint) (*dto.TileResponse, error) {
 	tile, err := s.repo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -55,10 +57,15 @@ func (s *tileService) GetTileByID(id uint) (*dto.TileResponse, error) {
 		return nil, err
 	}
 
+	// Проверка владельца
+	if tile.UserID != userID {
+		return nil, errors.New("access denied")
+	}
+
 	return s.toResponse(tile), nil
 }
 
-func (s *tileService) GetTiles(page, limit int) (*dto.PaginationResponse, error) {
+func (s *tileService) GetTiles(userID uint, page, limit int) (*dto.PaginationResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -67,7 +74,7 @@ func (s *tileService) GetTiles(page, limit int) (*dto.PaginationResponse, error)
 	}
 
 	offset := (page - 1) * limit
-	tiles, total, err := s.repo.FindAll(offset, limit)
+	tiles, total, err := s.repo.FindAllByUser(userID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -90,10 +97,15 @@ func (s *tileService) GetTiles(page, limit int) (*dto.PaginationResponse, error)
 	}, nil
 }
 
-func (s *tileService) UpdateTile(id uint, req *dto.UpdateTileRequest) (*dto.TileResponse, error) {
+func (s *tileService) UpdateTile(userID, id uint, req *dto.UpdateTileRequest) (*dto.TileResponse, error) {
 	tile, err := s.repo.FindByID(id)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("tile not found")
+	}
+
+	// Проверка владельца
+	if tile.UserID != userID {
+		return nil, errors.New("access denied")
 	}
 
 	tile.Name = req.Name
@@ -113,10 +125,15 @@ func (s *tileService) UpdateTile(id uint, req *dto.UpdateTileRequest) (*dto.Tile
 	return s.toResponse(tile), nil
 }
 
-func (s *tileService) PatchTile(id uint, req *dto.PatchTileRequest) (*dto.TileResponse, error) {
+func (s *tileService) PatchTile(userID, id uint, req *dto.PatchTileRequest) (*dto.TileResponse, error) {
 	tile, err := s.repo.FindByID(id)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("tile not found")
+	}
+
+	// Проверка владельца
+	if tile.UserID != userID {
+		return nil, errors.New("access denied")
 	}
 
 	if req.Name != nil {
@@ -154,14 +171,17 @@ func (s *tileService) PatchTile(id uint, req *dto.PatchTileRequest) (*dto.TileRe
 	return s.toResponse(tile), nil
 }
 
-func (s *tileService) DeleteTile(id uint) error {
-	// Проверяем существование плитки
-	_, err := s.repo.FindByID(id)
+func (s *tileService) DeleteTile(userID, id uint) error {
+	tile, err := s.repo.FindByID(id)
 	if err != nil {
-		return err
+		return errors.New("tile not found")
 	}
 
-	// Soft delete
+	// Проверка владельца
+	if tile.UserID != userID {
+		return errors.New("access denied")
+	}
+
 	return s.repo.Delete(id)
 }
 
