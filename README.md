@@ -1,6 +1,8 @@
+### Лабораторная работа №3 
+
 Описание проекта
 
-RESTful API для управления каталогом тротуарной плитки с полной системой аутентификации и авторизации. Реализовано в рамках лабораторной работы №3.
+RESTful API для управления каталогом тротуарной плитки с полной системой аутентификации и авторизации.
 
 ### Основные возможности
 
@@ -16,46 +18,48 @@ RESTful API для управления каталогом тротуарной 
 
 1. **Клонируйте репозиторий:**
 ```bash
-git clone https://github.com/Xeatric/paving-tiles-api.git
+git clone https://github.com/Xeatric/go-lab3
 cd paving-tiles-api
-
-cp .env.example .env
-
+```
 Отредактируйте .env
 
 Запустите приложение:
-
+``` bash
 docker-compose up --build
-
-Регистрация пользователя
+```
+**Регистрация пользователя**
 Цель: Создать нового пользователя в системе
 
 Параметр	Значение
 Method	POST
-URL	{{baseUrl}}/auth/register
+URL: 	{{baseUrl}}/auth/register
 Headers	Content-Type: application/json
 Body (raw JSON):
 
-json
+```json
 {
     "email": "{{user_email}}",
     "password": "{{user_password}}",
     "name": "{{user_name}}"
 }
-Логин (получение токенов)
+```
+**Логин (получение токенов)**
 Цель: Аутентифицировать пользователя и получить токены в cookies
 
 Параметр	Значение
+
 Method	POST
 URL	{{baseUrl}}/auth/login
 Headers	Content-Type: application/json
+
 Body (raw JSON):
+```json
 {
     "email": "{{user_email}}",
     "password": "{{user_password}}"
 }
-
-Whoami (проверка статуса)
+```
+**Whoami (проверка статуса)**
 Цель: Проверить, что пользователь авторизован
 
 Параметр	Значение
@@ -64,7 +68,7 @@ URL	{{baseUrl}}/api/v1/auth/whoami
 Headers	Authorization: Bearer {{access_token}}
 
 
-Whoami без токена (отрицательный тест)
+**Whoami без токена (отрицательный тест)**
 Цель: Проверить, что без токена доступ запрещён
 
 Параметр	Значение
@@ -72,7 +76,7 @@ Method	GET
 URL	{{baseUrl}}/api/v1/auth/whoami
 Headers	(без Authorization)
 
-Получение списка плиток (с токеном)
+**Получение списка плиток (с токеном)**
 Цель: Получить защищённый ресурс с авторизацией
 
 Параметр	Значение
@@ -81,7 +85,7 @@ URL	{{baseUrl}}/api/v1/tiles?page=1&limit=10
 Headers	Authorization: Bearer {{access_token}}
 
 
-Получение списка плиток (без токена)
+**Получение списка плиток (без токена)**
 Цель: Проверить, что без токена доступ запрещён
 
 Параметр	Значение
